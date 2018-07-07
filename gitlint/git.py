@@ -1,9 +1,9 @@
+import sys
 import arrow
-import sh
-# import exceptions separately, this makes it a little easier to mock them out in the unit tests
-from sh import CommandNotFound, ErrorReturnCode
-
 from gitlint.utils import ustr, sstr
+from gitlint import sh
+from locale import getpreferredencoding
+DEFAULT_ENCODING = getpreferredencoding() or "UTF-8"
 
 
 class GitContextError(Exception):
@@ -18,28 +18,56 @@ class GitNotInstalledError(GitContextError):
             u"See https://git-scm.com/book/en/v2/Getting-Started-Installing-Git on how to install git.")
 
 
+if sys.version_info[0] == 2:
+    ShNotGitError = OSError
+else:
+    ShNotGitError = FileNotFoundError  # noqa
+
+
 def _git(*command_parts, **kwargs):
-    """ Convenience function for running git commands. Automatically deals with exceptions and unicode. """
-    # Special arguments passed to sh: http://amoffat.github.io/sh/special_arguments.html
-    git_kwargs = {'_tty_out': False}
-    git_kwargs.update(kwargs)
     try:
-        result = sh.git(*command_parts, **git_kwargs)
-        # If we reach this point and the result has an exit_code that is larger than 0, this means that we didn't
-        # get an exception (which is the default sh behavior for non-zero exit codes) and so the user is expecting
-        # a non-zero exit code -> just return the entire result
-        if hasattr(result, 'exit_code') and result.exit_code > 0:
-            return result
-        return ustr(result)
-    except CommandNotFound:
+        result = sh.git(*command_parts, **kwargs)
+    except ShNotGitError:
         raise GitNotInstalledError()
-    except ErrorReturnCode as e:  # Something went wrong while executing the git command
-        error_msg = e.stderr.strip()
-        if '_cwd' in git_kwargs and b"Not a git repository" in error_msg:
-            error_msg = u"{0} is not a git repository.".format(git_kwargs['_cwd'])
+    ok_exit = kwargs.get('_ok_code', [0])
+    if not hasattr(result, 'exit_code'):
+        return result
+    if result.exit_code in ok_exit:
+        if result.exit_code > 0:
+            return result
         else:
-            error_msg = u"An error occurred while executing '{0}': {1}".format(e.full_cmd, error_msg)
+            return ustr(result)
+    else:
+        stderr = ustr(result.stderr)
+        error_msg = stderr.strip()
+        if '_cwd' in kwargs and "Not a git repository" in error_msg:
+            error_msg = u"{0} is not a git repository.".format(kwargs['_cwd'])
+        else:
+            error_msg = u"An error occurred while executing '{0}': {1}".format(result.full_cmd, error_msg)
         raise GitContextError(error_msg)
+
+# def _git(*command_parts, **kwargs):
+#     """ Convenience function for running git commands. Automatically deals with exceptions and unicode. """
+#     # Special arguments passed to sh: http://amoffat.github.io/sh/special_arguments.html
+#     git_kwargs = {'_tty_out': False}
+#     git_kwargs.update(kwargs)
+#     try:
+#         result = sh.git(*command_parts, **git_kwargs)
+#         # If we reach this point and the result has an exit_code that is larger than 0, this means that we didn't
+#         # get an exception (which is the default sh behavior for non-zero exit codes) and so the user is expecting
+#         # a non-zero exit code -> just return the entire result
+#         if hasattr(result, 'exit_code') and result.exit_code > 0:
+#             return result
+#         return ustr(result)
+#     except CommandNotFound:
+#         raise GitNotInstalledError()
+#     except ErrorReturnCode as e:  # Something went wrong while executing the git command
+#         error_msg = e.stderr.strip()
+#         if '_cwd' in git_kwargs and b"Not a git repository" in error_msg:
+#             error_msg = u"{0} is not a git repository.".format(git_kwargs['_cwd'])
+#         else:
+#             error_msg = u"An error occurred while executing '{0}': {1}".format(e.full_cmd, error_msg)
+#         raise GitContextError(error_msg)
 
 
 def git_version():
