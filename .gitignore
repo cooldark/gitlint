@@ -65,3 +65,4 @@ virtualenv
 
 # mkdocs
 site/
+.vscode/
