@@ -313,7 +313,7 @@ class LintConfigBuilder(object):
         self._config_path = os.path.abspath(filename)
         try:
             parser = ConfigParser()
-            parser.read(filename)
+            parser.read(filename, encoding='UTF-8')
 
             for section_name in parser.sections():
                 for option_name, option_value in parser.items(section_name):
