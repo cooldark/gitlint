@@ -19,6 +19,12 @@ class ShResult:
     def __str__(self):
         return self.stdout
 
+    def __eq__(self, other):
+        return str(self) == str(other)
+
+    def __ne__(self, other):
+        return str(self) != str(other)
+
 
 def gitlint(*command_parts, **kwargs):
     args = ['gitlint'] + list(command_parts)
@@ -52,8 +58,7 @@ def _exec(*args, **kwargs):
         popen_kwargs['cwd'] = kwargs['_cwd']
     p = subprocess.Popen(args, **popen_kwargs)
     result = p.communicate()
-    exit_code = p.returncode
-    if exit_code == 0:
+    if p.returncode == 0:
         return result[0].decode(DEFAULT_ENCODING)
     stdout = result[0].decode(DEFAULT_ENCODING)
     stderr = result[1].decode(DEFAULT_ENCODING)

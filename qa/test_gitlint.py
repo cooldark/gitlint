@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
+import sys
+import unittest
 from gitlint.sh import git, gitlint  # pylint: disable=no-name-in-module
 from qa.base import BaseTestCase
 
@@ -10,7 +12,7 @@ class IntegrationTests(BaseTestCase):
     def test_successful(self):
         # Test for STDIN with and without a TTY attached
         self._create_simple_commit(u"Sïmple title\n\nSimple bödy describing the commit")
-        output = gitlint(_cwd=self.tmp_git_repo, _tty_in=True, _err_to_out=True)
+        output = gitlint(_cwd=self.tmp_git_repo)
         self.assertEqual(output, "")
 
     def test_successful_merge_commit(self):
@@ -31,20 +33,20 @@ class IntegrationTests(BaseTestCase):
         git("merge", "--no-ff", "-m", u"Merge '{0}'".format(commit_title), hash, _cwd=self.tmp_git_repo)
 
         # Run gitlint and assert output is empty
-        output = gitlint(_cwd=self.tmp_git_repo, _tty_in=True)
+        output = gitlint(_cwd=self.tmp_git_repo)
         self.assertEqual(output, "")
 
         # Assert that we do see the error if we disable the ignore-merge-commits option
-        output = gitlint("-c", "general.ignore-merge-commits=false", _cwd=self.tmp_git_repo, _tty_in=True, _ok_code=[1])
+        output = gitlint("-c", "general.ignore-merge-commits=false", _cwd=self.tmp_git_repo, _ok_code=[1])
         self.assertEqual(output.exit_code, 1)
-        self.assertEqual(output, u"1: T1 Title exceeds max length (90>72): \"Merge '{0}'\"\n".format(commit_title))
+        self.assertEqual(output.stderr, u"1: T1 Title exceeds max length (90>72): \"Merge '{0}'\"\n".format(commit_title))
 
     def test_fixup_commit(self):
         # Create a normal commit and assert that it has a violation
         test_filename = self._create_simple_commit(u"Cömmit on WIP master\n\nSimple bödy that is long enough")
-        output = gitlint(_cwd=self.tmp_git_repo, _tty_in=True, _ok_code=[1])
+        output = gitlint(_cwd=self.tmp_git_repo, _ok_code=[1])
         expected = u"1: T5 Title contains the word 'WIP' (case-insensitive): \"Cömmit on WIP master\"\n"
-        self.assertEqual(output, expected)
+        self.assertEqual(output.stderr, expected)
 
         # Make a small modification to the commit and commit it using fixup commit
         with open(os.path.join(self.tmp_git_repo, test_filename), "a") as fh:
@@ -64,18 +66,18 @@ class IntegrationTests(BaseTestCase):
         self.assertEqual(output, "")
 
         # Make sure that if we set the ignore-fixup-commits option to false that we do still see the violations
-        output = gitlint("-c", "general.ignore-fixup-commits=false", _cwd=self.tmp_git_repo, _tty_in=True, _ok_code=[2])
+        output = gitlint("-c", "general.ignore-fixup-commits=false", _cwd=self.tmp_git_repo, _ok_code=[2])
         expected = u"1: T5 Title contains the word 'WIP' (case-insensitive): \"fixup! Cömmit on WIP master\"\n" + \
             u"3: B6 Body message is missing\n"
 
-        self.assertEqual(output, expected)
+        self.assertEqual(output.stderr, expected)
 
     def test_squash_commit(self):
         # Create a normal commit and assert that it has a violation
         test_filename = self._create_simple_commit(u"Cömmit on WIP master\n\nSimple bödy that is long enough")
-        output = gitlint(_cwd=self.tmp_git_repo, _tty_in=True, _ok_code=[1])
+        output = gitlint(_cwd=self.tmp_git_repo, _ok_code=[1])
         expected = u"1: T5 Title contains the word 'WIP' (case-insensitive): \"Cömmit on WIP master\"\n"
-        self.assertEqual(output, expected)
+        self.assertEqual(output.stderr, expected)
 
         # Make a small modification to the commit and commit it using squash commit
         with open(os.path.join(self.tmp_git_repo, test_filename), "a") as fh:
@@ -96,45 +98,45 @@ class IntegrationTests(BaseTestCase):
 
         # Make sure that if we set the ignore-squash-commits option to false that we do still see the violations
         output = gitlint("-c", "general.ignore-squash-commits=false",
-                         _cwd=self.tmp_git_repo, _tty_in=True, _ok_code=[2])
+                         _cwd=self.tmp_git_repo, _ok_code=[2])
         expected = u"1: T5 Title contains the word 'WIP' (case-insensitive): \"squash! Cömmit on WIP master\"\n" + \
             u"3: B5 Body message is too short (14<20): \"Töo short body\"\n"
 
-        self.assertEqual(output, expected)
+        self.assertEqual(output.stderr, expected)
 
     def test_violations(self):
         commit_msg = u"WIP: This ïs a title.\nContent on the sëcond line"
         self._create_simple_commit(commit_msg)
-        output = gitlint(_cwd=self.tmp_git_repo, _tty_in=True, _ok_code=[3])
+        output = gitlint(_cwd=self.tmp_git_repo, _ok_code=[3])
 
         expected = u"1: T3 Title has trailing punctuation (.): \"WIP: This ïs a title.\"\n" + \
             u"1: T5 Title contains the word 'WIP' (case-insensitive): \"WIP: This ïs a title.\"\n" + \
             u"2: B4 Second line is not empty: \"Content on the sëcond line\"\n"
-        self.assertEqual(output, expected)
+        self.assertEqual(output.stderr, expected)
 
     def test_msg_filename(self):
         tmp_commit_msg_file = self.create_tmpfile("WIP: msg-fïlename test.")
 
-        output = gitlint("--msg-filename", tmp_commit_msg_file, _tty_in=True, _ok_code=[3])
+        output = gitlint("--msg-filename", tmp_commit_msg_file, _ok_code=[3])
 
         expected = u"1: T3 Title has trailing punctuation (.): \"WIP: msg-fïlename test.\"\n" + \
             u"1: T5 Title contains the word 'WIP' (case-insensitive): \"WIP: msg-fïlename test.\"\n" + \
             u"3: B6 Body message is missing\n"
 
-        self.assertEqual(output, expected)
+        self.assertEqual(output.stderr, expected)
 
-    def test_msg_filename_no_tty(self):
-        """ Make sure --msg-filename option also works with no TTY attached """
+    @unittest.skip
+    def test_msg_filename_with_tty(self):
+        """ Make sure --msg-filename option sends to stdout when there is a TTY attached """
         tmp_commit_msg_file = self.create_tmpfile("WIP: msg-fïlename NO TTY test.")
 
         # We need to set _err_to_out explicitly for sh to merge stdout and stderr output in case there's
         # no TTY attached to STDIN
         # http://amoffat.github.io/sh/sections/special_arguments.html?highlight=_tty_in#err-to-out
-        output = gitlint("--msg-filename", tmp_commit_msg_file, _in=self.mock_stdin(),
-                         _tty_in=False, _err_to_out=True, _ok_code=[3])
+        output = gitlint("--msg-filename", tmp_commit_msg_file, _err_to_out=True, _ok_code=[3])
 
         expected = u"1: T3 Title has trailing punctuation (.): \"WIP: msg-fïlename NO TTY test.\"\n" + \
                    u"1: T5 Title contains the word 'WIP' (case-insensitive): \"WIP: msg-fïlename NO TTY test.\"\n" + \
                    u"3: B6 Body message is missing\n"
 
-        self.assertEqual(output, expected)
+        self.assertEqual(output.stdout, expected)
