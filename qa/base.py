@@ -8,7 +8,7 @@ from datetime import datetime
 from uuid import uuid4
 
 from unittest2 import TestCase
-from sh import git, rm, touch, DEFAULT_ENCODING  # pylint: disable=no-name-in-module
+from gitlint.sh import git, rm, touch, DEFAULT_ENCODING  # pylint: disable=no-name-in-module
 
 
 def ustr(obj):

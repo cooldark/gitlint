@@ -5,7 +5,7 @@ import sys
 
 import arrow
 
-from sh import gitlint, git  # pylint: disable=no-name-in-module
+from gitlint.sh import gitlint, git  # pylint: disable=no-name-in-module
 from qa.base import BaseTestCase
 
 

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
-from sh import git, gitlint  # pylint: disable=no-name-in-module
+from gitlint.sh import git, gitlint  # pylint: disable=no-name-in-module
 from qa.base import BaseTestCase
 
 
